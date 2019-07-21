@@ -84,6 +84,30 @@ def create_app(test_config=None):
         """), user_tweet)
 
         return '', 200
+
+    @app.route('/timeline/<int:user_id>', methods=['GET'])
+    def timeline(user_id):
+        rows = app.database.execute(text("""
+            SELECT
+                t.user_id,
+                t.tweet
+            FROM tweets t 
+            LEFT JOIN users_follow_list ufl ON ufl.user_id = :user_id
+            WHERE t.user_id = :user_id
+            OR t.user_id = ufl.follow_user_id
+        """), {
+            'user_id': user_id
+        })
+
+        timeline = [{
+            'user_id': row['user_id'],
+            'tweet': row['tweet']
+        } for row in rows]
+
+        return jsonify({
+            'user_id': user_id,
+            'timeline': timeline
+        })
     return app
 
 #
@@ -120,17 +144,4 @@ def create_app(test_config=None):
 #     return jsonify(user)
 #
 #
-# @app.route('/timeline/<int:user_id>', methods=['GET'])
-# def timeline(user_id):
-#     if user_id not in app.users:
-#         return '사용자가 존재하지 않습니다', 400
 #
-#     follow_list = app.users[user_id].get('follow', set())
-#     follow_list.add(user_id)
-#
-#     timeline = [tweet for tweet in app.tweets if tweet['user_id'] in follow_list]
-#
-#     return jsonify({
-#         'user_id': user_id,
-#         'timeline': timeline
-#     })
