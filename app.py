@@ -65,27 +65,29 @@ def create_app(test_config=None):
 
         return jsonify(created_user)
 
+    @app.route('/tweet', methods=['POST'])
+    def tweet():
+        user_tweet = request.json
+        tweet = user_tweet['tweet']
+
+        if len(tweet) > 300:
+            return '300자를 초과했습니다', 400
+
+        app.database.execute(text("""
+            INSERT INTO tweets (
+                user_id,
+                tweet
+            ) VALUES (
+                :id,
+                :tweet
+            )
+        """), user_tweet)
+
+        return '', 200
     return app
 
 #
-# @app.route('/tweet', methods=['POST'])
-# def tweet():
-#     payload = request.json
-#     user_id = int(payload['id'])
-#     tweet = payload['tweet']
 #
-#     if user_id not in app.users:
-#         return '사용자가 존재하지 않습니다', 400
-#
-#     if len(tweet) > 300:
-#         return '300자를 초과했습니다', 400
-#
-#     app.tweets.append({
-#         'user_id': user_id,
-#         'tweet': tweet
-#     })
-#
-#     return '', 200
 #
 #
 # @app.route('/follow', methods=['POST'])
@@ -127,8 +129,8 @@ def create_app(test_config=None):
 #     follow_list.add(user_id)
 #
 #     timeline = [tweet for tweet in app.tweets if tweet['user_id'] in follow_list]
-
-    return jsonify({
-        'user_id': user_id,
-        'timeline': timeline
-    })
+#
+#     return jsonify({
+#         'user_id': user_id,
+#         'timeline': timeline
+#     })
