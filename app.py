@@ -1,6 +1,8 @@
 from flask import Flask, jsonify, request, current_app
 from flask.json import JSONEncoder
 from sqlalchemy import create_engine, text
+import bcrypt
+
 import config
 
 
@@ -32,6 +34,7 @@ def create_app(test_config=None):
     @app.route('/sign-up', methods=['POST'])
     def sign_up():
         new_user = request.json
+        new_user['password'] = bcrypt.hashpw(new_user['password'].encoded('UTF-8'), bcrypt.gensalt())
 
         new_user_id = app.database.execute(text("""
             INSERT INTO users(
@@ -64,6 +67,7 @@ def create_app(test_config=None):
         } if row else None
 
         return jsonify(created_user)
+
 
     @app.route('/tweet', methods=['POST'])
     def tweet():
