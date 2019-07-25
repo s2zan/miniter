@@ -2,6 +2,8 @@ from flask import Flask, jsonify, request, current_app
 from flask.json import JSONEncoder
 from sqlalchemy import create_engine, text
 import bcrypt
+import jwt
+from datetime import datetime, timedelta
 
 import config
 
@@ -23,7 +25,8 @@ def create_app(test_config=None):
         # app.config.from_pyfile("config.py")
         app.config.update({
             'DB': config.db,
-            'DB_URL': config.db_url
+            'DB_URL': config.db_url,
+            'JWT_SECRET_KEY': config.jwt_secret_key
         })
     else:
         app.config.update(test_config)
@@ -34,7 +37,7 @@ def create_app(test_config=None):
     @app.route('/sign-up', methods=['POST'])
     def sign_up():
         new_user = request.json
-        new_user['password'] = bcrypt.hashpw(new_user['password'].encoded('UTF-8'), bcrypt.gensalt())
+        new_user['password'] = bcrypt.hashpw(new_user['password'].encode('UTF-8'), bcrypt.gensalt())
 
         new_user_id = app.database.execute(text("""
             INSERT INTO users(
@@ -68,6 +71,35 @@ def create_app(test_config=None):
 
         return jsonify(created_user)
 
+    @app.route('/login', methods=['POST'])
+    def login():
+        credential = request.json
+        email = credential['email']
+        password = credential['password']
+
+        row = database.execute(text("""
+            SELECT
+                id,
+                hashed_password
+            FROM users
+            WHERE email = :email
+        """), {'email': email}).fetchone()
+
+        if row and bcrypt.checkpw(password.encode('UTF-8'), row['hashed_password'].encode('UTF-8')):
+            user_id = row['id']
+            payload = {
+                'user_id': user_id,
+                'exp': datetime.utcnow() + timedelta(seconds=60*60*24)
+            }
+
+            print("secret:", app.config['JWT_SECRET_KEY'])
+            token = jwt.encode(payload, app.config['JWT_SECRET_KEY'], 'HS256')
+
+            return jsonify({
+                'access_token': token.decode('UTF-8')
+            })
+        else:
+            return '', 401
 
     @app.route('/tweet', methods=['POST'])
     def tweet():
