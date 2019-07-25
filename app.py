@@ -52,10 +52,29 @@ def get_user_info(user_id):
     }).fetchone()
 
 
+def get_timeline(user_id):
+    timeline = current_app.database.execute(text("""
+                SELECT
+                    t.user_id,
+                    t.tweet
+                FROM tweets t 
+                LEFT JOIN users_follow_list ufl ON ufl.user_id = :user_id
+                WHERE t.user_id = :user_id
+                OR t.user_id = ufl.follow_user_id
+            """), {
+        'user_id': user_id
+    }).fetchall()
+    return [{
+        'user_id': tweet['user_id'],
+        'tweet': tweet['tweet']
+    } for tweet in timeline]
+
+
 def create_app(test_config=None):
     print("test_config:", test_config)
     app = Flask(__name__)
 
+    CORS(app)
     app.json_encoder = CustomJSONEncoder
 
     if test_config is None:
@@ -151,22 +170,22 @@ def create_app(test_config=None):
 
     @app.route('/timeline/<int:user_id>', methods=['GET'])
     def timeline(user_id):
-        rows = app.database.execute(text("""
-            SELECT
-                t.user_id,
-                t.tweet
-            FROM tweets t 
-            LEFT JOIN users_follow_list ufl ON ufl.user_id = :user_id
-            WHERE t.user_id = :user_id
-            OR t.user_id = ufl.follow_user_id
-        """), {
-            'user_id': user_id
+        return jsonify({
+            'user_id': user_id,
+            'timeline': get_timeline(user_id)
         })
 
-        timeline = [{
-            'user_id': row['user_id'],
-            'tweet': row['tweet']
-        } for row in rows]
+    @app.route('/timeline', methods=['GET'])
+    @login_required
+    def user_timeline(user_id):
+        user_id = g.user_id
+
+        return jsonify({
+            'user_id': user_id,
+            'timeline': get_timeline(user_id)
+        })
+
+
 
         return jsonify({
             'user_id': user_id,
