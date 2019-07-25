@@ -1,9 +1,10 @@
-from flask import Flask, jsonify, request, current_app
+from flask import Flask, jsonify, request, Response, current_app, g
 from flask.json import JSONEncoder
 from sqlalchemy import create_engine, text
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
+from functools import wraps
 
 import config
 
@@ -13,6 +14,42 @@ class CustomJSONEncoder(JSONEncoder):
         if isinstance(obj, set):
             return list(obj)
         return JSONEncoder.default(self, obj)
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        access_token = request.headers.get('Authorization')
+        if access_token is not None:
+            try:
+                payload = jwt.decode(access_token, current_app.config['JWT_SECRET_KEY'], 'HS256')
+            except jwt.InvalidTokenError:
+                payload = None
+
+            if payload is None: return Response(status=401)
+
+            user_id = payload['user_id']
+            g['user_id'] = user_id
+            g['user'] = get_user_info(user_id) if user_id else None
+        else:
+            return Response(status=401)
+
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def get_user_info(user_id):
+    return current_app.database.execute(text("""
+                SELECT
+                    id, 
+                    name,
+                    email,
+                    profile
+                FROM users
+                WHERE id = :user_id
+            """), {
+        'user_id': user_id
+    }).fetchone()
 
 
 def create_app(test_config=None):
@@ -50,17 +87,7 @@ def create_app(test_config=None):
             )
         """), new_user).lastrowid
 
-        row = current_app.database.execute(text("""
-            SELECT
-                id, 
-                name,
-                email,
-                profile
-            FROM users
-            WHERE id = :user_id
-        """), {
-            'user_id': new_user_id
-        }).fetchone()
+        row = get_user_info(new_user_id)
 
         created_user = {
             'id': row['id'],
@@ -102,6 +129,7 @@ def create_app(test_config=None):
             return '', 401
 
     @app.route('/tweet', methods=['POST'])
+    @login_required
     def tweet():
         user_tweet = request.json
         tweet = user_tweet['tweet']
@@ -146,6 +174,7 @@ def create_app(test_config=None):
         })
 
     @app.route('/follow', methods=['POST'])
+    @login_required
     def follow():
         payload = request.json
 
@@ -162,6 +191,7 @@ def create_app(test_config=None):
         return '', 200
 
     @app.route('/unfollow', methods=['POST'])
+    @login_required
     def unfollow():
         payload = request.json
 
