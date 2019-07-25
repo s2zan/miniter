@@ -5,6 +5,7 @@ import bcrypt
 import jwt
 from datetime import datetime, timedelta
 from functools import wraps
+from flask_cors import CORS
 
 import config
 
@@ -29,8 +30,8 @@ def login_required(f):
             if payload is None: return Response(status=401)
 
             user_id = payload['user_id']
-            g['user_id'] = user_id
-            g['user'] = get_user_info(user_id) if user_id else None
+            g.user_id = user_id
+            g.user = get_user_info(user_id) if user_id else None
         else:
             return Response(status=401)
 
@@ -151,6 +152,7 @@ def create_app(test_config=None):
     @login_required
     def tweet():
         user_tweet = request.json
+        user_tweet['id'] = g.user_id
         tweet = user_tweet['tweet']
 
         if len(tweet) > 300:
@@ -177,7 +179,7 @@ def create_app(test_config=None):
 
     @app.route('/timeline', methods=['GET'])
     @login_required
-    def user_timeline(user_id):
+    def user_timeline():
         user_id = g.user_id
 
         return jsonify({
@@ -185,17 +187,11 @@ def create_app(test_config=None):
             'timeline': get_timeline(user_id)
         })
 
-
-
-        return jsonify({
-            'user_id': user_id,
-            'timeline': timeline
-        })
-
     @app.route('/follow', methods=['POST'])
     @login_required
     def follow():
         payload = request.json
+        payload['id'] = g.user_id
 
         app.database.execute(text("""
                     INSERT INTO users_follow_list (
@@ -213,6 +209,7 @@ def create_app(test_config=None):
     @login_required
     def unfollow():
         payload = request.json
+        payload['id'] = g.user_id
 
         app.database.execute(text("""
                     DELETE FROM users_follow_list 
