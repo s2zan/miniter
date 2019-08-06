@@ -21,17 +21,31 @@ def api():
 
 
 def setup_function():
+
+    database.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+    database.execute(text("TRUNCATE users"))
+    database.execute(text("TRUNCATE tweets"))
+    database.execute(text("TRUNCATE users_follow_list"))
+    database.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+
     global user_id
     hashed_password = bcrypt.hashpw(
         b'test',
         bcrypt.gensalt()
     )
-    new_user = {
-        'email': 'test@gmail.com',
-        'password': hashed_password,
-        'name': '테스트',
-        'profile': 'test profile'
-    }
+    new_users = [
+        {
+            'email': 'test@gmail.com',
+            'password': hashed_password,
+            'name': '테스트',
+            'profile': 'test profile'
+        }, {
+           'email': 'second@naver.com',
+           'password': hashed_password,
+           'name': '김철수',
+           'profile': 'test profile'
+        }
+    ]
 
     user_id = database.execute(text("""
         INSERT INTO users (
@@ -39,7 +53,16 @@ def setup_function():
         ) VALUE (
             :name, :email, :profile, :password
         )
-    """), new_user).lastrowid
+    """), new_users).lastrowid + 1
+
+    database.execute(text("""
+        INSERT INTO tweets (
+            user_id, tweet
+        ) VALUES (
+            :user_id,
+            "Hello World!"
+        )
+    """), {'user_id': user_id + 1})
 
 
 def teardown_function():
@@ -55,9 +78,39 @@ def test_ping(api):
     assert b'pong' in resp.data
 
 
-def test_tweet(api):
-    global user_id
+def test_login(api):
+    resp = api.post(
+        '/login',
+        data=json.dumps({'email': 'test@gmail.com', 'password': 'test'}),
+        content_type='application/json'
+    )
+    assert b"access_token" in resp.data
 
+
+def test_unauthorized(api):
+    resp = api.post(
+        '/tweet',
+        data=json.dumps({'tweet': 'hello~!'}),
+        content_type='application/json'
+    )
+    assert resp.status_code == 401
+
+    resp = api.post(
+        '/follow',
+        data=json.dumps({'follow': user_id + 1}),
+        content_type='application/json'
+    )
+    assert resp.status_code == 401
+
+    resp = api.post(
+        '/unfollow',
+        data=json.dumps({'unfollow': user_id + 1}),
+        content_type='application/json'
+    )
+    assert resp.status_code == 401
+
+
+def test_tweet(api):
     # login
     resp = api.post(
         '/login',
@@ -89,4 +142,109 @@ def test_tweet(api):
                 'tweet': 'Hello World!'
             }
         ]
+    }
+
+
+def test_follow(api):
+    resp = api.post(
+        '/login',
+        data=json.dumps({'email': 'test@gmail.com', 'password': 'test'}),
+        content_type='application/json'
+    )
+    resp_json = json.loads(resp.data.decode('utf-8'))
+    access_token = resp_json['access_token']
+
+    # timeline empty check
+    resp = api.get(f'timeline/1')
+    tweets = json.loads(resp.data.decode('utf-8'))
+    assert resp.status_code == 200
+    assert tweets == {
+        'user_id': user_id,
+        'timeline': []
+    }
+
+    # follow
+    resp = api.post(
+        '/follow',
+        data=json.dumps({'follow': user_id + 1}),
+        content_type='application/json',
+        headers={'Authorization': access_token}
+    )
+    assert resp.status_code == 200
+
+    # check timeline
+    resp = api.get(f'/timeline/{user_id}')
+    tweets = json.loads(resp.data.decode('utf-8'))
+
+    assert resp.status_code == 200
+    assert tweets == {
+        'user_id': user_id,
+        'timeline': [
+            {
+                'user_id': user_id + 1,
+                'tweet': 'Hello World!'
+            }
+        ]
+    }
+
+
+def test_unfollow(api):
+    resp = api.post(
+        '/login',
+        data=json.dumps({'email': 'test@gmail.com', 'password': 'test'}),
+        content_type='application/json'
+    )
+    resp_json = json.loads(resp.data.decode('utf-8'))
+    access_token = resp_json['access_token']
+
+    # timeline empty check
+    resp = api.get(f'timeline/{user_id}')
+    tweets = json.loads(resp.data.decode('utf-8'))
+    assert resp.status_code == 200
+    assert tweets == {
+        'user_id': user_id,
+        'timeline': []
+    }
+
+    # follow
+    resp = api.post(
+        '/follow',
+        data=json.dumps({'follow': user_id + 1}),
+        content_type='application/json',
+        headers={'Authorization': access_token}
+    )
+    assert resp.status_code == 200
+
+    # check timeline
+    resp = api.get(f'/timeline/{user_id}')
+    tweets = json.loads(resp.data.decode('utf-8'))
+
+    assert resp.status_code == 200
+    assert tweets == {
+        'user_id': user_id,
+        'timeline': [
+            {
+                'user_id': user_id + 1,
+                'tweet': 'Hello World!'
+            }
+        ]
+    }
+
+    # unfollow
+    resp = api.post(
+        '/unfollow',
+        data=json.dumps({'unfollow': user_id + 1}),
+        content_type='application/json',
+        headers={'Authorization': access_token}
+    )
+    assert resp.status_code == 200
+
+    # check timeline
+    resp = api.get(f'/timeline/{user_id}')
+    tweets = json.loads(resp.data.decode('utf-8'))
+
+    assert resp.status_code == 200
+    assert tweets == {
+        'user_id': user_id,
+        'timeline': []
     }
