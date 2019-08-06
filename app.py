@@ -72,7 +72,6 @@ def get_timeline(user_id):
 
 
 def create_app(test_config=None):
-    print("test_config:", test_config)
     app = Flask(__name__)
 
     CORS(app)
@@ -143,7 +142,6 @@ def create_app(test_config=None):
                 'exp': datetime.utcnow() + timedelta(seconds=60*60*24)
             }
 
-            print("secret:", app.config['JWT_SECRET_KEY'])
             token = jwt.encode(payload, app.config['JWT_SECRET_KEY'], 'HS256')
 
             return jsonify({
