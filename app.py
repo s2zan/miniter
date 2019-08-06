@@ -91,6 +91,10 @@ def create_app(test_config=None):
     database = create_engine(app.config['DB_URL'], encoding='utf-8', max_overflow=0)
     app.database = database
 
+    @app.route('/ping', methods=['GET'])
+    def ping():
+        return 'pong'
+
     @app.route('/sign-up', methods=['POST'])
     def sign_up():
         new_user = request.json
